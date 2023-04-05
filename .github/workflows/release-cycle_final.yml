@@ -1,0 +1,59 @@
+name: "Release Cycle: Final"
+
+on:
+  workflow_dispatch:
+    inputs:
+      final_version:
+        description: 'The final version to release.'
+        required: true
+
+jobs:
+  build-final-rc:
+    name: "Build final release candidate"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      FINAL_VERSION: ${{ github.event.inputs.final_version }}
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          ref: release/${{ env.FINAL_VERSION }}
+      - name: Initialize mandatory git config
+        run: |
+          git config user.name "GitHub actions"
+          git config user.email noreply@github.com
+      - name: Update VERSION file
+        run: echo ${{ env.FINAL_VERSION }} > VERSION
+      - name: Commit VERSION
+        run: |
+          git add VERSION
+          git commit --message "[RELEASE] ${{ env.FINAL_VERSION }} final"
+          git push origin release/${{ env.FINAL_VERSION }}
+          sleep 5
+      - name: Find Pull Request
+        uses: juliangruber/find-pull-request-action@v1
+        id: find-pull-request
+        with:
+          branch: release/${{ env.FINAL_VERSION }}
+      - run: echo "Pull Request ${number} (${sha})"
+        env:
+          number: ${{ steps.find-pull-request.outputs.number }}
+      - name: Merge Pull Request
+        uses: juliangruber/merge-pull-request-action@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          number: ${{ steps.find-pull-request.outputs.number }}
+          method: "merge"
+      - name: Create a tag
+        run: |
+          git fetch origin main
+          git checkout --track origin/main
+          git tag v${{ env.FINAL_VERSION }}
+          git push origin v${{ env.FINAL_VERSION }}
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ${{ env.FINAL_VERSION }}
+          tag_name: v${{ env.FINAL_VERSION }}
+          generate_release_notes: true
